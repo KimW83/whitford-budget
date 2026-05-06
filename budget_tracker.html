@@ -216,6 +216,7 @@ tr:hover td { background: var(--bg); }
   <button class="nav-tab active" onclick="showView('household')">Household</button>
   <button class="nav-tab" onclick="showView('broadbeach')">Broadbeach</button>
   <button class="nav-tab" onclick="showView('savings')">Savings</button>
+  <button class="nav-tab" onclick="exportData()" style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:11px">⬇ Backup</button>
 </nav>
 
 <!-- HOUSEHOLD VIEW -->
@@ -1009,6 +1010,76 @@ function adjustBBBalance(amount) {
   acc.balance = Math.round((acc.balance + amount) * 100) / 100;
   acc.lastUpdated = new Date().toLocaleDateString('en-AU');
   saveBBBalance(acc);
+}
+
+
+// ─── EXPORT / BACKUP ─────────────────────────────────────────────────────────
+
+function exportData() {
+  const state = loadState();
+  const entries = loadEntries();
+  const accounts = loadAccounts();
+  const bbAcc = loadBBBalance();
+  const savings = loadSavingsHistory();
+
+  let csv = [];
+
+  // ── Household entries ──
+  csv.push('HOUSEHOLD SPENDING');
+  csv.push('Month,Date,Category,Amount,Note');
+  const allCats = [...state.hhFixed, ...state.hhVariable];
+  const hhMonths = entries['household'] || {};
+  Object.keys(hhMonths).sort().forEach(month => {
+    hhMonths[month].forEach(e => {
+      const cat = allCats.find(c => c.id === e.catId);
+      csv.push([month, e.date, cat ? cat.name : e.catId, e.amount.toFixed(2), e.note || ''].map(v => `"${v}"`).join(','));
+    });
+  });
+
+  csv.push('');
+
+  // ── Broadbeach entries ──
+  csv.push('BROADBEACH EXPENSES');
+  csv.push('Month,Date,Category,Amount,Note');
+  const bbMonths = entries['broadbeach'] || {};
+  Object.keys(bbMonths).sort().forEach(month => {
+    bbMonths[month].forEach(e => {
+      const catLabel = e.catId === 'dd' ? 'Monthly BB' : e.catId === 'scheduled' ? 'Scheduled' : 'Other';
+      csv.push([month, e.date, catLabel, e.amount.toFixed(2), e.note || ''].map(v => `"${v}"`).join(','));
+    });
+  });
+
+  csv.push('');
+
+  // ── Savings ──
+  csv.push('SAVINGS ACCOUNTS');
+  csv.push('Account,Balance,Last Updated');
+  accounts.forEach(a => {
+    csv.push([a.name, a.balance.toFixed(2), a.updated || ''].map(v => `"${v}"`).join(','));
+  });
+
+  csv.push('');
+
+  // ── BB Account ──
+  csv.push('BROADBEACH EXPENSE ACCOUNT');
+  csv.push(`"Balance","${bbAcc.balance.toFixed(2)}"`);
+
+  csv.push('');
+
+  // ── Budgets ──
+  csv.push('HOUSEHOLD BUDGETS');
+  csv.push('Category,Type,Monthly Budget');
+  state.hhFixed.forEach(c => csv.push([c.name, 'Fixed', c.budget.toFixed(2)].map(v => `"${v}"`).join(',')));
+  state.hhVariable.forEach(c => csv.push([c.name, 'Variable', c.budget.toFixed(2)].map(v => `"${v}"`).join(',')));
+
+  // Download
+  const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `whitford_budget_backup_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
